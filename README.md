@@ -68,12 +68,6 @@ yarn add expo-filedb
 npm install expo-filedb
 ```
 
-Until the package is on the registry, you can depend on the GitHub repo:
-
-```bash
-npm install github:maydibee/expo-filedb
-```
-
 `expo-file-system` is a peer dependency — it's already included in any Expo project.
 
 ### 2. Define your models
