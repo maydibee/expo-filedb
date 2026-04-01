@@ -1,0 +1,66 @@
+{
+  "name": "expo-filedb",
+  "version": "0.1.0",
+  "description": "High-performance embedded file-based database for React Native and Expo. No native modules. No ejecting. Just fast.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "jest --config jest.config.js",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "database",
+    "embedded",
+    "file-system",
+    "offline",
+    "local-storage",
+    "nosql",
+    "cache",
+    "persistence",
+    "filedb",
+    "expo-file-system"
+  ],
+  "peerDependencies": {
+    "expo-file-system": ">=15.0.0",
+    "react": ">=18.0.0",
+    "react-native": ">=0.73.0"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "react-native": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/jest": "^29.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maydibee/expo-filedb.git"
+  },
+  "homepage": "https://github.com/maydibee/expo-filedb#readme",
+  "bugs": {
+    "url": "https://github.com/maydibee/expo-filedb/issues"
+  }
+}
