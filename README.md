@@ -1,13 +1,11 @@
 # expo-filedb
 
-**A high-performance embedded database for React Native / Expo. No native modules. No ejecting. Just fast.**
-
----
+High-performance embedded file-based database for React Native and Expo. Works with Expo managed workflow, no native modules required.
 
 ## Table of Contents
 
 - [Features](#features)
-- [Why expo-filedb?](#why-expo-filedb)
+- [Comparison](#comparison)
 - [Quick Start](#quick-start)
 - [Defining Models](#defining-models)
 - [Creating a Store](#creating-a-store)
@@ -22,25 +20,21 @@
 - [Performance](#performance)
 - [API Reference](#api-reference)
 
----
-
 ## Features
 
-- **Declarative model definitions** — define your schema once, get typed CRUD for free
-- **In-memory read cache** — instant reads after first load
-- **Write-behind queue** — non-blocking disk writes with deduplication
-- **Transaction batching** — atomic multi-document writes with automatic rollback
-- **Segmented JSONL event log** — O(1) append-only writes
-- **Materialized views** — one file per document for fast individual lookups
-- **Query engine** — 12 operators, `$and`/`$or` logic, sorting, pagination
-- **Relationship support** — `has-many` and `belongs-to` with eager loading
-- **Observable queries** — reactive subscriptions + React hooks
-- **Schema migrations** — version chaining, field transforms, custom functions
-- **Zero native dependencies** — works with Expo managed workflow, no ejecting
+- Declarative model definitions with typed CRUD
+- In-memory read cache (instant reads after first load)
+- Write-behind queue with deduplication
+- Transaction batching with automatic rollback
+- Segmented JSONL event log, O(1) append
+- Materialized views, one file per document
+- Query engine: 12 operators, `$and`/`$or`, sorting, pagination
+- Relationships: `has-many` and `belongs-to` with eager loading
+- Observable queries and React hooks
+- Schema migrations with version chaining and custom transforms
+- Zero native dependencies
 
----
-
-## Why expo-filedb?
+## Comparison
 
 | Feature | expo-filedb | AsyncStorage | expo-sqlite | WatermelonDB | Realm |
 |---|---|---|---|---|---|
@@ -53,21 +47,17 @@
 | Schema migrations | Yes | No | Manual | Yes | Yes |
 | Relationships | Yes | No | Manual | Yes | Yes |
 
----
-
 ## Quick Start
 
 ### 1. Install
 
 ```bash
-# Using yarn
 yarn add expo-filedb
 
-# Using npm
 npm install expo-filedb
 ```
 
-`expo-file-system` is a peer dependency — it's already included in any Expo project.
+Requires `expo-file-system` as a peer dependency (included in Expo projects by default).
 
 ### 2. Define your models
 
@@ -104,24 +94,16 @@ const store = await createStore({
 ### 4. Use it
 
 ```typescript
-// Insert
 const user = await store.users.insert({ name: 'Alice', email: 'alice@example.com', age: 25 })
 
-// Query
 const adults = await store.users.find({ where: { age: { $gte: 18 } } })
 
-// Update
 await store.users.update(user.id, { age: 26 })
 
-// Delete
 await store.users.delete(user.id)
 ```
 
----
-
 ## Defining Models
-
-Models are defined using `defineModel()` and the `field()` builder:
 
 ```typescript
 import { defineModel, field } from 'expo-filedb'
@@ -181,8 +163,6 @@ const Post = defineModel<Post>('posts', {
 })
 ```
 
----
-
 ## Creating a Store
 
 ```typescript
@@ -204,8 +184,6 @@ Each key in `models` becomes a typed property on the store:
 store.users   // Collection<User>
 store.posts   // Collection<Post>
 ```
-
----
 
 ## CRUD Operations
 
@@ -308,8 +286,6 @@ const count = await store.users.count({
 })
 ```
 
----
-
 ## Querying
 
 ### Query Operators
@@ -333,7 +309,7 @@ const count = await store.users.count({
 ### Logical Operators
 
 ```typescript
-// AND — all conditions must match
+// AND
 await store.users.find({
   where: {
     $and: [
@@ -343,7 +319,7 @@ await store.users.find({
   },
 })
 
-// OR — at least one condition must match
+// OR
 await store.users.find({
   where: {
     $or: [
@@ -360,15 +336,13 @@ await store.users.find({
 await store.users.find({
   orderBy: { lastName: 'asc', firstName: 'asc' },
   limit: 20,
-  offset: 40,  // Page 3
+  offset: 40,
 })
 ```
 
----
-
 ## Transactions
 
-All writes inside a transaction are batched into a single I/O operation. If any write fails, all changes are rolled back automatically.
+Writes inside a transaction are batched into a single I/O operation. On failure, all changes roll back.
 
 ### Callback-based (recommended)
 
@@ -378,24 +352,23 @@ const result = await store.transaction(async (tx) => {
   const post = await tx.posts.insert({ title: 'Hello', authorId: user.id })
   return { user, post }
 })
-// Both writes committed atomically
 ```
 
-If an error occurs:
+On error:
 
 ```typescript
 try {
   await store.transaction(async (tx) => {
     await tx.users.insert({ name: 'Alice', age: 25 })
     throw new Error('Something went wrong')
-    // Alice is NOT inserted — transaction is rolled back
+    // Alice is NOT inserted, transaction rolled back
   })
 } catch (e) {
   // Handle error
 }
 ```
 
-### Imperative (for integration with existing code)
+### Imperative
 
 ```typescript
 store.beginTransaction()
@@ -409,24 +382,20 @@ try {
 }
 ```
 
----
-
 ## Relationships
 
 ### Eager Loading
 
 ```typescript
-// Load users with their posts
 const usersWithPosts = await store.users.find({
   include: ['posts'],
 })
-// Each user object now has a `posts` array
+// Each user object has a `posts` array
 
-// Load posts with their author
 const postsWithAuthor = await store.posts.find({
   include: ['author'],
 })
-// Each post object now has an `author` object
+// Each post object has an `author` object
 ```
 
 ### Manual Traversal
@@ -437,8 +406,6 @@ const posts = await store.posts.find({
   where: { authorId: user.id },
 })
 ```
-
----
 
 ## Observables & React Hooks
 
@@ -452,7 +419,6 @@ const subscription = store.users.observe({
   console.log('Adult users:', users)
 })
 
-// Later: stop listening
 subscription.unsubscribe()
 ```
 
@@ -487,11 +453,7 @@ function UserProfile({ userId }: { userId: string }) {
 }
 ```
 
----
-
 ## Migrations
-
-When your schema changes between app versions, migrations ensure existing user data is transformed correctly.
 
 ### Defining Migrations
 
@@ -500,15 +462,13 @@ import { createStore, defineModel, field, migrate } from 'expo-filedb'
 
 const store = await createStore({
   name: 'myapp',
-  version: 3,  // Current schema version
+  version: 3,
   models: { users: UserModelV3 },
   migrations: [
-    // v1 → v2: Add a 'role' field with default value
     migrate(1, 2)
       .addField('users', 'role', 'member')
       .build(),
 
-    // v2 → v3: Rename 'name' to 'fullName'
     migrate(2, 3)
       .renameField('users', 'name', 'fullName')
       .build(),
@@ -522,26 +482,20 @@ const store = await createStore({
 |---|---|
 | `.addField(collection, field, default)` | Add a new field with a default value |
 | `.removeField(collection, field)` | Remove a field from all documents |
-| `.renameField(collection, old, new)` | Rename a field (copy + delete) |
-| `.transformField(collection, field, fn)` | Transform a field's value with a function |
-| `.custom(async (db) => { ... })` | Run arbitrary migration logic |
+| `.renameField(collection, old, new)` | Rename a field |
+| `.transformField(collection, field, fn)` | Transform field values with a function |
+| `.custom(async (db) => { ... })` | Arbitrary migration logic |
 
-### How Migrations Work
+### How It Works
 
-1. On startup, expo-filedb reads the stored schema version from `meta.json`
-2. If the stored version differs from the configured version, it builds a migration path
-3. Migrations are executed sequentially: v1 → v2 → v3
-4. After each step, the version is persisted — if step 2→3 fails, the database stays at v2
-5. Schema validation is temporarily disabled during migrations (data may be in an intermediate state)
-6. After all migrations complete, validation is re-enabled
-
-### Chaining Migrations
-
-Migrations are chained automatically. If a user is on v1 and the app is at v3, both `1→2` and `2→3` run in sequence. The migration runner uses BFS to find the shortest path through the version graph.
+1. On startup, the stored schema version is read from `meta.json`
+2. If it differs from the configured version, a migration path is built
+3. Migrations execute sequentially (v1 -> v2 -> v3)
+4. After each step the version is persisted; if step 2->3 fails, the database stays at v2
+5. Schema validation is disabled during migration and re-enabled after
+6. The migration runner uses BFS to find the shortest path through the version graph
 
 ### Custom Migrations
-
-For complex transformations that can't be expressed with the built-in helpers:
 
 ```typescript
 migrate(2, 3).custom(async (db) => {
@@ -556,48 +510,32 @@ migrate(2, 3).custom(async (db) => {
 }).build()
 ```
 
----
-
 ## Database Lifecycle
 
 ```typescript
-// Flush pending writes to disk
-await store.flush()
+await store.flush()     // Flush pending writes to disk
+await store.close()     // Flush + release memory
+await store.purge()     // Clear all data, keep store operational
+await store.destroy()   // Delete all data and remove from disk
 
-// Close the database (flush + release memory)
-await store.close()
-
-// Purge all data but keep the store operational
-await store.purge()
-
-// Destroy all data and remove from disk (store becomes unusable)
-await store.destroy()
-
-// Export as JSON
 const dump = await store.exportJSON()
-
-// Import from JSON
 await store.importJSON(dump)
 
-// Access event log (for sync)
 const events = await store.loadEvents()
 await store.clearEvents()
 
-// Invalidate FS cache after external directory moves (e.g. backup/restore)
-store.clearFsCache()
+store.clearFsCache()    // Invalidate FS cache after external directory moves
 ```
 
 ### Dynamic Collections
 
-Access collections by name at runtime — useful for per-entity metadata or other runtime-determined names:
-
 ```typescript
-// Returns the pre-created collection for known models,
-// or creates a dynamic unvalidated collection for unknown names
 const metadataCol = store.collection('snags-metadata-abc123')
 const items = await metadataCol.find()
 await metadataCol.upsert({ id: 'meta-1', lastSync: new Date().toISOString() })
 ```
+
+Returns the pre-created collection for known models or creates a dynamic unvalidated collection for runtime-determined names.
 
 ### Engine Options
 
@@ -606,17 +544,24 @@ const store = await createStore({
   name: 'myapp',
   models: { users: UserModel },
   engineOptions: {
-    // Override the views directory (useful for existing data)
-    viewsBasePath: `${rootPath}/views`,
-    // Disable internal event logging (when your app has its own event sourcing)
-    skipEventLog: true,
+    viewsBasePath: `${rootPath}/views`,    // Override views directory
+    skipEventLog: true,                     // Disable internal event logging
   },
 })
 ```
 
----
-
 ## Architecture
+
+### Design Influences
+
+The storage engine combines ideas from several established approaches:
+
+- **CoreData** (Apple): in-memory object graph with background persistence to disk
+- **LSM-Tree** (LevelDB, RocksDB): writes go to an in-memory structure first, then flush as immutable segments to disk in background
+- **CQRS**: separate write path (event log) and read path (materialized views), each optimized independently
+- **Write-behind caching**: cache is updated synchronously on write, disk persistence is deferred and batched
+
+### Internal Components
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -628,7 +573,7 @@ const store = await createStore({
 ┌──────────────────────▼──────────────────────────────┐
 │         Store (Declarative API Layer)                │
 │                                                      │
-│  defineModel() → createStore() → typed collections  │
+│  defineModel() -> createStore() -> typed collections │
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -644,8 +589,8 @@ const store = await createStore({
 │                                                      │
 │  ┌─────────────┐  ┌──────────────┐  ┌────────────┐ │
 │  │ MemoryCache  │  │ WriteQueue   │  │ EventLog   │ │
-│  │ (read cache) │  │ (write-behind│  │ (JSONL     │ │
-│  │              │  │  background) │  │  segments)  │ │
+│  │ (read path)  │  │ (write-behind│  │ (JSONL     │ │
+│  │              │  │  batching)   │  │  segments)  │ │
 │  └─────────────┘  └──────────────┘  └────────────┘ │
 │  ┌─────────────┐  ┌──────────────┐                  │
 │  │ ViewStore    │  │ Transaction  │                  │
@@ -660,23 +605,21 @@ const store = await createStore({
 
 ### Write Flow
 
-1. **Cache update** — document is written to `MemoryCache` synchronously (instant read availability)
-2. **Event log** — mutation event is appended to a JSONL segment file (O(1))
-3. **View enqueue** — document file write is enqueued to the `WriteQueue` (background)
-4. **Background flush** — `WriteQueue` processes writes in batches, deduplicating by key
+1. **Cache update**: document is written to `MemoryCache` synchronously (instant read availability)
+2. **Event log**: mutation event is appended to a JSONL segment file (O(1))
+3. **View enqueue**: document file write is added to the `WriteQueue`
+4. **Background flush**: `WriteQueue` processes writes in batches, deduplicating by key
 
 ### Read Flow
 
-1. **Cache hit** — if the collection is loaded, return from `MemoryCache` (O(1) lookup)
-2. **Cache miss** — load all documents from `ViewStore` (disk), populate cache, then query in memory
+1. **Cache hit**: if the collection is loaded, return from `MemoryCache` (O(1) lookup)
+2. **Cache miss**: load all documents from `ViewStore` (disk), populate cache, then query in memory
 
 ### Transaction Flow
 
-1. **Begin** — buffer all events and view writes in memory
-2. **Commit** — write all events as one segment, enqueue all views
-3. **Rollback** — revert cache to pre-transaction state, discard buffers
-
----
+1. **Begin**: buffer all events and view writes in memory
+2. **Commit**: write all events as one segment, enqueue all views
+3. **Rollback**: revert cache to pre-transaction state, discard buffers
 
 ## Performance
 
@@ -685,13 +628,11 @@ const store = await createStore({
 | `insert` | O(1) amortized | Cache update + event segment + background view write |
 | `findById` (cached) | O(1) | Direct Map lookup |
 | `findById` (cold) | O(1) disk read | Single file read + cache population |
-| `find` (cached) | O(N) | In-memory filter where N = collection size |
+| `find` (cached) | O(N) | In-memory filter, N = collection size |
 | `find` (cold) | O(N) disk reads | Load all files + cache + filter |
 | `update` | O(1) amortized | Same as insert |
 | `delete` | O(1) amortized | Cache delete + background file delete |
-| `transaction commit` | O(K) | K = number of operations (1 segment write) |
-
----
+| `transaction commit` | O(K) | K = number of operations in the transaction |
 
 ## API Reference
 
@@ -712,7 +653,7 @@ const store = await createStore({
 | `store.beginTransaction()` | Start an imperative transaction |
 | `store.commitTransaction()` | Commit an imperative transaction |
 | `store.rollbackTransaction()` | Rollback an imperative transaction |
-| `store.collection(name)` | Get or create a collection by name (dynamic) |
+| `store.collection(name)` | Get or create a collection by name |
 | `store.flush()` | Flush pending writes to disk |
 | `store.close()` | Flush + release memory |
 | `store.purge()` | Clear all data, keep store operational |
@@ -745,8 +686,6 @@ const store = await createStore({
 |---|---|
 | `useQuery(collection, query?)` | Subscribe to query results |
 | `useDocument(collection, id)` | Subscribe to a single document |
-
----
 
 ## License
 
