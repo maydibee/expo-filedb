@@ -209,4 +209,190 @@ describe('Collection', () => {
       expect(await collection.count()).toBe(1)
     })
   })
+
+  describe('upsertMany', () => {
+    it('inserts new documents', async () => {
+      const docs = await collection.upsertMany([
+        { id: 'u1', name: 'Alice', age: 25 },
+        { id: 'u2', name: 'Bob', age: 30 },
+      ])
+      expect(docs).toHaveLength(2)
+      expect(await collection.findById('u1')).toMatchObject({ name: 'Alice' })
+      expect(await collection.findById('u2')).toMatchObject({ name: 'Bob' })
+    })
+
+    it('updates existing documents preserving unmentioned fields', async () => {
+      await collection.insert({ id: 'u1', name: 'Alice', age: 25, email: 'alice@test.com' } as any)
+      const [updated] = await collection.upsertMany([{ id: 'u1', name: 'Alice Updated' }])
+      expect(updated.name).toBe('Alice Updated')
+      expect(updated.age).toBe(25)
+      expect((updated as any).email).toBe('alice@test.com')
+    })
+
+    it('handles mix of inserts and updates', async () => {
+      await collection.insert({ id: 'u1', name: 'Alice', age: 25 } as any)
+      const docs = await collection.upsertMany([
+        { id: 'u1', name: 'Alice Updated', age: 26 },
+        { id: 'u2', name: 'Bob', age: 30 },
+      ])
+      expect(docs).toHaveLength(2)
+      expect(docs[0].name).toBe('Alice Updated')
+      expect(docs[0].age).toBe(26)
+      expect(docs[1].name).toBe('Bob')
+      expect(await collection.count()).toBe(2)
+    })
+
+    it('auto-generates ids when not provided', async () => {
+      const docs = await collection.upsertMany([{ name: 'NoId', age: 40 }])
+      expect(docs[0].id).toBeDefined()
+      expect(docs[0].id).toBe('test-1')
+      expect(await collection.findById('test-1')).toMatchObject({ name: 'NoId' })
+    })
+
+    it('applies schema defaults on insert', async () => {
+      const configWithDefaults: CollectionConfig = {
+        schema: {
+          name: { type: 'string', required: true },
+          age: { type: 'number', required: true },
+          role: { type: 'string', default: 'member' },
+        },
+      }
+      const collections2: Record<string, Collection<any>> = {}
+      const col2 = new Collection<User & { role: string }>(
+        'users2', configWithDefaults, engine, makeId, () => collections2,
+      )
+      collections2.users2 = col2
+
+      const docs = await col2.upsertMany([{ id: 'u1', name: 'Alice', age: 25 }])
+      expect((docs[0] as any).role).toBe('member')
+    })
+
+    it('rolls back all changes on error when managing own transaction', async () => {
+      await expect(
+        collection.upsertMany([
+          { id: 'u1', name: 'Alice', age: 25 },
+          { id: 'u2', name: 123 as any, age: 30 },
+        ]),
+      ).rejects.toThrow('Validation failed')
+
+      expect(await collection.findById('u1')).toBeNull()
+      expect(await collection.count()).toBe(0)
+    })
+
+    it('participates in external transaction', async () => {
+      engine.transaction.begin()
+      await collection.upsertMany([{ id: 'u1', name: 'Alice', age: 25 }])
+      expect(engine.transaction.isActive()).toBe(true)
+      await engine.transaction.commit(engine.eventLog, engine.writeQueue, engine.viewStore)
+
+      expect(await collection.findById('u1')).toMatchObject({ name: 'Alice' })
+    })
+
+    it('does not commit external transaction on error', async () => {
+      engine.transaction.begin()
+      await collection.insert({ id: 'u0', name: 'Valid', age: 20 } as any)
+
+      await expect(
+        collection.upsertMany([{ id: 'u1', name: 123 as any, age: 30 }]),
+      ).rejects.toThrow('Validation failed')
+
+      expect(engine.transaction.isActive()).toBe(true)
+      engine.transaction.rollback(engine.cache)
+      expect(await collection.findById('u0')).toBeNull()
+    })
+
+    it('does not rollback external transaction on error', async () => {
+      engine.transaction.begin()
+      await collection.insert({ id: 'u0', name: 'Valid', age: 20 } as any)
+
+      await expect(
+        collection.upsertMany([{ id: 'u1', name: 123 as any, age: 30 }]),
+      ).rejects.toThrow('Validation failed')
+
+      expect(engine.transaction.isActive()).toBe(true)
+
+      await engine.transaction.commit(engine.eventLog, engine.writeQueue, engine.viewStore)
+      expect(await collection.findById('u0')).toMatchObject({ name: 'Valid' })
+    })
+
+    it('returns empty array for empty input', async () => {
+      const docs = await collection.upsertMany([])
+      expect(docs).toEqual([])
+    })
+
+    it('handles large batch', async () => {
+      const items = Array.from({ length: 100 }, (_, i) => ({
+        id: `bulk-${i}`,
+        name: `User ${i}`,
+        age: 20 + (i % 50),
+      }))
+
+      const docs = await collection.upsertMany(items)
+      expect(docs).toHaveLength(100)
+      expect(await collection.count()).toBe(100)
+    })
+  })
+
+  describe('insertMany with external transaction', () => {
+    it('does not commit parent transaction', async () => {
+      engine.transaction.begin()
+      await collection.insertMany([{ name: 'Alice', age: 25 }])
+      expect(engine.transaction.isActive()).toBe(true)
+      await collection.insertMany([{ name: 'Bob', age: 30 }])
+      expect(engine.transaction.isActive()).toBe(true)
+      await engine.transaction.commit(engine.eventLog, engine.writeQueue, engine.viewStore)
+
+      expect(await collection.count()).toBe(2)
+    })
+
+    it('does not rollback parent transaction on error', async () => {
+      engine.transaction.begin()
+      await collection.insertMany([{ name: 'Alice', age: 25 }])
+
+      await expect(
+        collection.insertMany([{ name: 123 as any, age: 30 }]),
+      ).rejects.toThrow('Validation failed')
+
+      expect(engine.transaction.isActive()).toBe(true)
+    })
+
+    it('still manages own transaction when no parent', async () => {
+      await collection.insertMany([{ name: 'Alice', age: 25 }])
+      expect(engine.transaction.isActive()).toBe(false)
+      expect(await collection.count()).toBe(1)
+    })
+
+    it('writes from later operations are buffered within parent transaction', async () => {
+      engine.transaction.begin()
+      await collection.insertMany([{ id: 'a', name: 'Alice', age: 25 } as any])
+      await collection.insert({ id: 'b', name: 'Bob', age: 30 } as any)
+
+      engine.transaction.rollback(engine.cache)
+
+      expect(await collection.findById('a')).toBeNull()
+      expect(await collection.findById('b')).toBeNull()
+    })
+  })
+
+  describe('deleteMany with external transaction', () => {
+    it('does not commit parent transaction', async () => {
+      await collection.insert({ id: 'a', name: 'Alice', age: 25 } as any)
+      await collection.insert({ id: 'b', name: 'Bob', age: 35 } as any)
+
+      engine.transaction.begin()
+      await collection.deleteMany({ where: { name: 'Alice' } })
+      expect(engine.transaction.isActive()).toBe(true)
+      await engine.transaction.commit(engine.eventLog, engine.writeQueue, engine.viewStore)
+
+      expect(await collection.findById('a')).toBeNull()
+      expect(await collection.findById('b')).toMatchObject({ name: 'Bob' })
+    })
+
+    it('still manages own transaction when no parent', async () => {
+      await collection.insert({ id: 'a', name: 'Alice', age: 25 } as any)
+      await collection.deleteMany({ where: { name: 'Alice' } })
+      expect(engine.transaction.isActive()).toBe(false)
+      expect(await collection.findById('a')).toBeNull()
+    })
+  })
 })

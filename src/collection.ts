@@ -62,13 +62,18 @@ export class Collection<T extends Document = Document> {
 
   /**
    * Insert multiple documents in a single operation.
-   * Automatically wrapped in a transaction for atomicity.
+   * Wrapped in a transaction for atomicity when no external transaction
+   * is active. Participates in the parent transaction otherwise.
    */
   async insertMany(items: Array<Omit<T, 'id'> & { id?: Identifier }>): Promise<T[]> {
     await this.engine.ensureLoaded(this.name)
     const docs: T[] = []
 
-    this.engine.transaction.begin()
+    const shouldManageTransaction = !this.engine.transaction.isActive()
+    if (shouldManageTransaction) {
+      this.engine.transaction.begin()
+    }
+
     try {
       for (const data of items) {
         const doc = applyDefaults({ id: data.id ?? this.generateId(), ...data }, this.schema) as T
@@ -76,9 +81,13 @@ export class Collection<T extends Document = Document> {
         await this.engine.writeDocument('insert', this.name, doc)
         docs.push(doc)
       }
-      await this.engine.transaction.commit(this.engine.eventLog, this.engine.writeQueue, this.engine.viewStore)
+      if (shouldManageTransaction) {
+        await this.engine.transaction.commit(this.engine.eventLog, this.engine.writeQueue, this.engine.viewStore)
+      }
     } catch (e) {
-      this.engine.transaction.rollback(this.engine.cache)
+      if (shouldManageTransaction) {
+        this.engine.transaction.rollback(this.engine.cache)
+      }
       throw e
     }
 
@@ -137,6 +146,57 @@ export class Collection<T extends Document = Document> {
   }
 
   /**
+   * Insert or update multiple documents in a single operation.
+   * For each document:
+   *   - If `doc.id` exists in the collection → update (merge fields)
+   *   - If `doc.id` does not exist → insert with schema defaults
+   *
+   * Wrapped in a transaction for atomicity when no external transaction
+   * is active. Participates in the parent transaction otherwise.
+   */
+  async upsertMany(items: Array<Partial<T> & { id?: Identifier }>): Promise<T[]> {
+    await this.engine.ensureLoaded(this.name)
+    const docs: T[] = []
+
+    const shouldManageTransaction = !this.engine.transaction.isActive()
+    if (shouldManageTransaction) {
+      this.engine.transaction.begin()
+    }
+
+    try {
+      for (const data of items) {
+        const id = data.id ?? this.generateId()
+        const existing = this.engine.cache.get(this.name, id) as T | undefined
+
+        let doc: T
+        if (existing) {
+          doc = { ...existing, ...data, id } as T
+          if (!this.skipValidation) this.validate(doc)
+          await this.engine.writeDocument('update', this.name, doc)
+        } else {
+          doc = applyDefaults({ ...data, id }, this.schema) as T
+          if (!this.skipValidation) this.validate(doc)
+          await this.engine.writeDocument('insert', this.name, doc)
+        }
+
+        docs.push(doc)
+      }
+
+      if (shouldManageTransaction) {
+        await this.engine.transaction.commit(this.engine.eventLog, this.engine.writeQueue, this.engine.viewStore)
+      }
+    } catch (e) {
+      if (shouldManageTransaction) {
+        this.engine.transaction.rollback(this.engine.cache)
+      }
+      throw e
+    }
+
+    this.observable.notifyChange()
+    return docs
+  }
+
+  /**
    * Delete a document by id.
    * @returns `true` if the document was found and deleted, `false` otherwise.
    */
@@ -149,20 +209,30 @@ export class Collection<T extends Document = Document> {
 
   /**
    * Delete all documents matching a query.
+   * Wrapped in a transaction for atomicity when no external transaction
+   * is active. Participates in the parent transaction otherwise.
    * @returns the number of deleted documents.
    */
   async deleteMany(query: QueryOptions): Promise<number> {
     const docs = await this.find(query)
     if (docs.length === 0) return 0
 
-    this.engine.transaction.begin()
+    const shouldManageTransaction = !this.engine.transaction.isActive()
+    if (shouldManageTransaction) {
+      this.engine.transaction.begin()
+    }
+
     try {
       for (const doc of docs) {
         await this.engine.deleteDocument(this.name, doc.id)
       }
-      await this.engine.transaction.commit(this.engine.eventLog, this.engine.writeQueue, this.engine.viewStore)
+      if (shouldManageTransaction) {
+        await this.engine.transaction.commit(this.engine.eventLog, this.engine.writeQueue, this.engine.viewStore)
+      }
     } catch (e) {
-      this.engine.transaction.rollback(this.engine.cache)
+      if (shouldManageTransaction) {
+        this.engine.transaction.rollback(this.engine.cache)
+      }
       throw e
     }
 

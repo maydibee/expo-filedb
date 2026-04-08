@@ -206,6 +206,7 @@ const users = await store.users.insertMany([
   { name: 'Bob', email: 'bob@example.com', age: 30 },
 ])
 // All-or-nothing: if any fails, none are inserted
+// Safe to call inside store.transaction(): participates in the parent transaction
 ```
 
 ### Find by ID
@@ -263,6 +264,17 @@ const user = await store.users.upsert({
 // Inserts if not found, updates if exists
 ```
 
+### Upsert Many (atomic)
+
+```typescript
+const users = await store.users.upsertMany([
+  { id: 'existing-id', name: 'Alice Updated', age: 26 },  // update
+  { id: 'new-id', name: 'Bob', email: 'bob@example.com', age: 30 },  // insert
+])
+// For each document: inserts if not found, updates (merges) if exists
+// All-or-nothing: if any fails, none are applied
+```
+
 ### Delete
 
 ```typescript
@@ -276,6 +288,7 @@ const deleted = await store.users.delete('some-id')
 const count = await store.users.deleteMany({
   where: { age: { $lt: 18 } },
 })
+// Safe to call inside store.transaction() — participates in the parent transaction
 ```
 
 ### Count
@@ -579,7 +592,8 @@ The storage engine combines ideas from several established approaches:
 ┌──────────────────────▼──────────────────────────────┐
 │              Collection<T>                           │
 │                                                      │
-│  insert · update · replace · upsert · delete        │
+│  insert · update · replace · upsert · upsertMany    │
+│  delete · deleteMany · insertMany                   │
 │  find · findOne · findById · count                  │
 │  observe · observeOne                               │
 └──────────────────────┬──────────────────────────────┘
@@ -671,6 +685,7 @@ The storage engine combines ideas from several established approaches:
 | `update(id, changes)` | `Promise<T>` | Partial update |
 | `replace(id, data)` | `Promise<T>` | Full replacement |
 | `upsert(data)` | `Promise<T>` | Insert or update |
+| `upsertMany(items)` | `Promise<T[]>` | Insert or update multiple (atomic) |
 | `delete(id)` | `Promise<boolean>` | Delete by id |
 | `deleteMany(query)` | `Promise<number>` | Delete matching |
 | `findById(id)` | `Promise<T \| null>` | Find by id |
