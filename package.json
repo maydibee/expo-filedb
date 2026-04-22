@@ -1,6 +1,6 @@
 {
   "name": "expo-filedb",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "High-performance embedded file-based database for React Native and Expo. No native modules. No ejecting. Just fast.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

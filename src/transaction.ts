@@ -7,7 +7,7 @@ import type { WriteQueue } from './storage/write-queue'
 interface BufferedView {
   collection: string
   id: string
-  data: Document
+  data: Document | null
   previousData: Document | undefined
 }
 
@@ -38,7 +38,7 @@ export class TransactionManager {
     this.bufferedEvents.push(event)
   }
 
-  bufferView(collection: string, id: string, data: Document, previousData: Document | undefined): void {
+  bufferView(collection: string, id: string, data: Document | null, previousData: Document | undefined): void {
     this.bufferedViews.push({ collection, id, data, previousData })
   }
 
@@ -57,12 +57,19 @@ export class TransactionManager {
     }
 
     for (const v of views) {
-      writeQueue.enqueue(`${v.collection}/${v.id}`, () => viewStore.write(v.collection, v.id, v.data))
+      const key = `${v.collection}/${v.id}`
+      const data = v.data
+      if (data == null) {
+        writeQueue.enqueue(key, () => viewStore.delete(v.collection, v.id))
+      } else {
+        writeQueue.enqueue(key, () => viewStore.write(v.collection, v.id, data))
+      }
     }
   }
 
   rollback(cache: MemoryCache): void {
-    for (const v of this.bufferedViews) {
+    for (let i = this.bufferedViews.length - 1; i >= 0; i--) {
+      const v = this.bufferedViews[i]
       if (v.previousData) {
         cache.set(v.collection, v.id, v.previousData)
       } else {

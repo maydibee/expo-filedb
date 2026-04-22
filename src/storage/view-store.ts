@@ -19,6 +19,10 @@ export class ViewStore {
     for (const file of files) {
       const content = await this.fs.readFile(`${dirPath}/${file}`)
       const doc = JSON.parse(content) as Document
+      if (doc == null) {
+        await this.fs.deleteFile(`${dirPath}/${file}`)
+        continue
+      }
       result[doc.id ?? file] = doc
     }
     return result
@@ -28,7 +32,12 @@ export class ViewStore {
     const filePath = `${this.viewsRoot}/${collection}/${id}`
     if (!(await this.fs.exists(filePath))) return null
     const content = await this.fs.readFile(filePath)
-    return JSON.parse(content) as Document
+    const doc = JSON.parse(content) as Document
+    if (doc == null) {
+      await this.fs.deleteFile(filePath)
+      return null
+    }
+    return doc
   }
 
   async write(collection: string, id: string, data: Document): Promise<void> {

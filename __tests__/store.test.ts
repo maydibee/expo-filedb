@@ -129,6 +129,70 @@ describe('createStore (declarative API)', () => {
     await store.close()
   })
 
+  it('delete inside transaction removes document from disk', async () => {
+    const sharedFs = new MockFileSystem()
+    const store = await createStore({
+      name: 'testdb', models: { users: UserModel, posts: PostModel },
+      fileSystem: sharedFs, rootPath: '/root',
+    })
+    const user = await store.users.insert({ name: 'Alice', age: 25 })
+    await store.flush()
+
+    await store.transaction(async (s) => {
+      await s.users.delete(user.id)
+    })
+    await store.flush()
+    await store.close()
+
+    const store2 = await createStore({
+      name: 'testdb', models: { users: UserModel, posts: PostModel },
+      fileSystem: sharedFs, rootPath: '/root',
+    })
+    expect(await store2.users.findById(user.id)).toBeNull()
+    expect(await store2.users.find()).toHaveLength(0)
+    await store2.close()
+  })
+
+  it('insert+delete in same transaction results in no document on disk', async () => {
+    const sharedFs = new MockFileSystem()
+    const store = await createStore({
+      name: 'testdb', models: { users: UserModel, posts: PostModel },
+      fileSystem: sharedFs, rootPath: '/root',
+    })
+
+    await store.transaction(async (s) => {
+      await s.users.insert({ id: 'temp-1', name: 'Temp', age: 99 } as any)
+      await s.users.delete('temp-1')
+    })
+    await store.flush()
+    await store.close()
+
+    const store2 = await createStore({
+      name: 'testdb', models: { users: UserModel, posts: PostModel },
+      fileSystem: sharedFs, rootPath: '/root',
+    })
+    expect(await store2.users.findById('temp-1')).toBeNull()
+    expect(await store2.users.find()).toHaveLength(0)
+    await store2.close()
+  })
+
+  it('rolls back delete inside transaction correctly', async () => {
+    const store = await makeStore()
+    await store.users.insert({ id: 'keep-1', name: 'Keep', age: 40 } as any)
+
+    await expect(
+      store.transaction(async (s) => {
+        await s.users.delete('keep-1')
+        throw new Error('Abort')
+      }),
+    ).rejects.toThrow('Abort')
+
+    const found = await store.users.findById('keep-1')
+    expect(found?.name).toBe('Keep')
+
+    await store.close()
+  })
+
   it('supports flush, export, and destroy', async () => {
     const store = await makeStore()
     await store.users.insert({ name: 'Alice', age: 25 })

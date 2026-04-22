@@ -374,6 +374,34 @@ describe('Collection', () => {
     })
   })
 
+  describe('delete inside transaction', () => {
+    it('removes view file from disk on commit', async () => {
+      const user = await collection.insert({ id: 'del-1', name: 'Alice', age: 25 } as any)
+      await engine.flush()
+
+      engine.transaction.begin()
+      await collection.delete(user.id)
+      await engine.transaction.commit(engine.eventLog, engine.writeQueue, engine.viewStore)
+      await engine.flush()
+
+      expect(await collection.findById('del-1')).toBeNull()
+      expect(await engine.viewStore.loadOne('users', 'del-1')).toBeNull()
+    })
+
+    it('does not leave null file on disk after commit', async () => {
+      await collection.insert({ id: 'del-2', name: 'Bob', age: 30 } as any)
+      await engine.flush()
+
+      engine.transaction.begin()
+      await collection.delete('del-2')
+      await engine.transaction.commit(engine.eventLog, engine.writeQueue, engine.viewStore)
+      await engine.flush()
+
+      const allDocs = await engine.viewStore.loadAll('users')
+      expect(allDocs['del-2']).toBeUndefined()
+    })
+  })
+
   describe('deleteMany with external transaction', () => {
     it('does not commit parent transaction', async () => {
       await collection.insert({ id: 'a', name: 'Alice', age: 25 } as any)

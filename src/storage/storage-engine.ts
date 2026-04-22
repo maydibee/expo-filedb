@@ -109,7 +109,7 @@ export class StorageEngine {
           documentId: id, data: null, timestamp: new Date().toISOString(),
         })
       }
-      this.transaction.bufferView(collection, id, null as any, existing)
+      this.transaction.bufferView(collection, id, null, existing)
       return existing
     }
 

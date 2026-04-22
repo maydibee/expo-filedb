@@ -98,4 +98,77 @@ describe('TransactionManager', () => {
 
     expect(cache.get('users', 'new-1')).toBeUndefined()
   })
+
+  it('commit deletes view file when data is null', async () => {
+    const doc = { id: 'doc-1', name: 'Test' }
+    await viewStore.write('users', 'doc-1', doc)
+
+    tx.begin()
+    tx.bufferView('users', 'doc-1', null, doc)
+    await tx.commit(eventLog, writeQueue, viewStore)
+    await writeQueue.flush()
+
+    const loaded = await viewStore.loadOne('users', 'doc-1')
+    expect(loaded).toBeNull()
+  })
+
+  it('commit writes document when data is present', async () => {
+    const doc = { id: 'doc-1', name: 'Updated' }
+
+    tx.begin()
+    tx.bufferView('users', 'doc-1', doc, undefined)
+    await tx.commit(eventLog, writeQueue, viewStore)
+    await writeQueue.flush()
+
+    const loaded = await viewStore.loadOne('users', 'doc-1')
+    expect(loaded).toEqual(doc)
+  })
+
+  it('commit handles mixed writes and deletes', async () => {
+    const existing = { id: 'del-1', name: 'ToDelete' }
+    await viewStore.write('users', 'del-1', existing)
+
+    tx.begin()
+    tx.bufferView('users', 'del-1', null, existing)
+    tx.bufferView('users', 'new-1', { id: 'new-1', name: 'Created' }, undefined)
+    await tx.commit(eventLog, writeQueue, viewStore)
+    await writeQueue.flush()
+
+    expect(await viewStore.loadOne('users', 'del-1')).toBeNull()
+    expect(await viewStore.loadOne('users', 'new-1')).toEqual({ id: 'new-1', name: 'Created' })
+  })
+
+  it('commit settles insert+delete of same doc to deletion via WriteQueue dedup', async () => {
+    tx.begin()
+    tx.bufferView('users', 'tmp-1', { id: 'tmp-1', name: 'Temp' }, undefined)
+    tx.bufferView('users', 'tmp-1', null, { id: 'tmp-1', name: 'Temp' })
+    await tx.commit(eventLog, writeQueue, viewStore)
+    await writeQueue.flush()
+
+    expect(await viewStore.loadOne('users', 'tmp-1')).toBeNull()
+  })
+
+  it('rollback correctly reverts insert+delete of same document', () => {
+    tx.begin()
+    cache.set('users', 'tmp-1', { id: 'tmp-1', name: 'Temp' })
+    tx.bufferView('users', 'tmp-1', { id: 'tmp-1', name: 'Temp' }, undefined)
+    cache.delete('users', 'tmp-1')
+    tx.bufferView('users', 'tmp-1', null, { id: 'tmp-1', name: 'Temp' })
+    tx.rollback(cache)
+
+    expect(cache.get('users', 'tmp-1')).toBeUndefined()
+  })
+
+  it('rollback correctly reverts update+delete of same document', () => {
+    cache.set('users', 'doc-1', { id: 'doc-1', name: 'Original' })
+
+    tx.begin()
+    cache.set('users', 'doc-1', { id: 'doc-1', name: 'Updated' })
+    tx.bufferView('users', 'doc-1', { id: 'doc-1', name: 'Updated' }, { id: 'doc-1', name: 'Original' })
+    cache.delete('users', 'doc-1')
+    tx.bufferView('users', 'doc-1', null, { id: 'doc-1', name: 'Updated' })
+    tx.rollback(cache)
+
+    expect(cache.get('users', 'doc-1')).toEqual({ id: 'doc-1', name: 'Original' })
+  })
 })
